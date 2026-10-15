@@ -32,5 +32,10 @@ pipeline {
                 }
             }
         }
+        stage('Test') {
+    steps {
+        echo 'Bonjour Jenkins !'
+    }
+}
     }
 }
