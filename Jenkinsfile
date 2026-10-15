@@ -1,101 +1,32 @@
 pipeline {
     agent any
-        options {
-        timeout(time: 5, unit: 'MINUTES')
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        disableConcurrentBuilds()
+
+    options {
+        timeout(time: 10, unit: 'MINUTES')
         timestamps()
-    }
-    parameters {
-        string(name: 'APP_VERSION', defaultValue: '1.0.0', description: 'Version à construire')
-        choice(name: 'ENVIRONNEMENT', choices: ['dev', 'recette', 'prod'], description: 'Environnement cible')
-        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Exécuter les tests ?')
     }
 
     stages {
-        stage('Informations') {
-            steps {
-                echo "Version : ${params.APP_VERSION}"
-                echo "Environnement : ${params.ENVIRONNEMENT}"
-                echo "Tests activés : ${params.RUN_TESTS}"
-            }
-        }
-
-        stage('Build') {
+        stage('Préparation') {
             steps {
                 sh '''
-                    mkdir -p build
-                    echo "app ${APP_VERSION}" > build/app.txt
+                    rm -rf reports .coverage .coverage.*
+                    mkdir -p reports
+                    python3 --version
+                    python3 -m venv .venv
+                    .venv/bin/pip install --quiet --upgrade pip
+                    .venv/bin/pip install --quiet -r requirements.txt
                 '''
             }
         }
-                stage('Tests') {
-            when {
-                expression { params.RUN_TESTS }
-            }
-            steps {
-                echo 'Exécution des tests...'
-                sh 'test -f build/app.txt'
-            }
-        }
 
-        stage('Déploiement recette') {
-            when {
-                allOf {
-                    expression { params.ENVIRONNEMENT == 'recette' }
-                    branch 'main'
-                }
-            }
+        stage('Tests') {
             steps {
-                echo 'Déploiement en recette...'
+                sh '.venv/bin/python -m pytest -v --junitxml=reports/junit.xml'
             }
-        }
-
-        stage('Déploiement prod') {
-            when {
-                expression { params.ENVIRONNEMENT == 'prod' }
-            }
-            steps {
-                echo 'Déploiement en production...'
-            }
-        }
-        stage('Qualité') {
-            failFast true
-            parallel {
-                stage('Lint') {
-                    steps {
-                        echo 'Analyse statique...'
-                        sh 'sleep 10'
-                    }
-                }
-                stage('Tests unitaires') {
-                    steps {
-                        echo 'Tests unitaires...'
-                        sh 'sleep 15'
-                    }
-                }
-                stage('Sécurité') {
-                    steps {
-                        echo 'Scan de dépendances...'
-                        sh 'sleep 5'
-                    }
-                }
-            }
-        }
-
-                stage('Secrets') {
-            steps {
-                withCredentials([
-                    string(credentialsId: 'api-token', variable: 'API_TOKEN'),
-                    usernamePassword(credentialsId: 'deploy-creds',
-                                     usernameVariable: 'DEPLOY_USER',
-                                     passwordVariable: 'DEPLOY_PASS')
-                ]) {
-                    sh '''
-                        echo "Token utilisé : $API_TOKEN"
-                        echo "Utilisateur : $DEPLOY_USER"
-                        echo "Longueur du mot de passe : ${#DEPLOY_PASS}"
-                    '''
+            post {
+                always {
+                    junit 'reports/junit.xml'
                 }
             }
         }
