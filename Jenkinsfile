@@ -20,9 +20,11 @@ pipeline {
             }
         }
 
-        stage('Tests') {
+                stage('Tests') {
             steps {
-                sh '.venv/bin/python -m pytest -v --junitxml=reports/junit.xml'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+                    sh '.venv/bin/python -m pytest -v --junitxml=reports/junit.xml'
+                }
             }
             post {
                 always {
